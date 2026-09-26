@@ -1,0 +1,35 @@
+{
+  "none": {
+    "len=4096_depth=0.1": 0.4,
+    "len=4096_depth=0.5": 0.6,
+    "len=4096_depth=0.9": 1.0,
+    "len=8192_depth=0.1": 0.0,
+    "len=8192_depth=0.5": 0.0,
+    "len=8192_depth=0.9": 0.0,
+    "len=16384_depth=0.1": 0.0,
+    "len=16384_depth=0.5": 0.0,
+    "len=16384_depth=0.9": 0.0
+  },
+  "position_interpolation": {
+    "len=4096_depth=0.1": 0.0,
+    "len=4096_depth=0.5": 0.0,
+    "len=4096_depth=0.9": 0.0,
+    "len=8192_depth=0.1": 0.0,
+    "len=8192_depth=0.5": 0.0,
+    "len=8192_depth=0.9": 0.0,
+    "len=16384_depth=0.1": 0.0,
+    "len=16384_depth=0.5": 0.0,
+    "len=16384_depth=0.9": 0.0
+  },
+  "ntk_aware": {
+    "len=4096_depth=0.1": 1.0,
+    "len=4096_depth=0.5": 0.2,
+    "len=4096_depth=0.9": 1.0,
+    "len=8192_depth=0.1": 1.0,
+    "len=8192_depth=0.5": 1.0,
+    "len=8192_depth=0.9": 0.8,
+    "len=16384_depth=0.1": 0.0,
+    "len=16384_depth=0.5": 0.0,
+    "len=16384_depth=0.9": 0.0
+  }
+}
