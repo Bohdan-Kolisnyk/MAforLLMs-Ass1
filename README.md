@@ -1,4 +1,4 @@
-## Part 1 — Context extension (RoPE)
+## Part 1 - Context extension (RoPE)
 
 Notebook: `Part-1/maforllms-ass1-pt1.ipynb` · Results: `Part-1/` · 1× T4, fp16, seed 42 · transformers 5.0.0, torch 2.10.0+cu128
 
@@ -32,7 +32,7 @@ Loss is the mean over the position range; passkey is hits over 3 depths × 5 tri
 NTK at L_train, depth 0.5 scored 0.2, below baseline's 0.6. This is probably noise but was not re-run. One seed. No predictions were registered before the runs.
 Saved output of notebook cell 7 shows slowest freq 6.14e-07 because the cell was re-run after the sweeps left the model in NTK mode (unscaled value: 2.455e-06).
 
-## Part 3 — MixLoRA (bonus)
+## Part 3 - MixLoRA (bonus)
 
 Notebook: `maforllms-ass1-pt3.ipynb` · Config: `config_part3.json` · 1× T4, fp16, seed 42
 
