@@ -1,5 +1,3 @@
-### Team: Bohdan Kolisnyk, Mykhailo Tkachenko, Denys Pushkaruk
-
 ## Part 1 - Context extension (RoPE)
 
 Notebook: `Part-1/maforllms-ass1-pt1.ipynb` · Results: `Part-1/` · 1× T4, fp16, seed 42 · transformers 5.0.0, torch 2.10.0+cu128
@@ -33,6 +31,43 @@ Loss is the mean over the position range; passkey is hits over 3 depths × 5 tri
 **Limitations.** No fine-tuned comparison, no dynamic NTK or YaRN, no English/PG-19 contrast (Ukrainian only). Passkey has 5 trials per cell (resolution 0.2).
 NTK at L_train, depth 0.5 scored 0.2, below baseline's 0.6. This is probably noise but was not re-run. One seed. No predictions were registered before the runs.
 Saved output of notebook cell 7 shows slowest freq 6.14e-07 because the cell was re-run after the sweeps left the model in NTK mode (unscaled value: 2.455e-06).
+
+## Part 2 - Load balancing (MoE)
+
+Notebook: `Part-2/maforllms-ass1-pt2.ipynb` · Results: `Part-2/` · 1× T4, fp16, seeds 42/43 · transformers 5.16.1, torch 2.11.0+cu128
+
+**Setup.** EuroMoE-2.6B-A0.6B: 24 layers, 64 routed + 0 shared experts, top-8, softmax router with renormalized top-k weights, 2.61B total / 0.50B active. Pretraining balancing is not published (config has `router_aux_loss_coef = 0.01`, unconfirmed).
+Data: Kobza split by doc-id hash, train 2.46M / val 41k / test 123k tokens (1,024-token chunks), Part 1 eval docs excluded.
+Training: 300 steps × 8,192 tokens, only attention and routers are trained (experts frozen to fit a T4), same data order per seed, 30.7 min per run.
+
+**Method.** Own `BalancedRouter` (fp32 logits, same interface as HF) records f_i, MaxVio, load entropy and logsumexp per layer. Drift = Jaccard overlap of base and trained top-8 sets on the same test tokens.
+Aux loss is N·Σf_i·P_i (1.0 at balance; HF's version equals k). Loss-free bias: fp32 buffer outside the optimizer, selection only, sign update with u = 1e-3 after every step.
+Checks: top-k matches the HF router on 99.4% of tokens, bias never changes the gates, aux loss is non-zero (1.97) and changes with the coefficient.
+Noise floor (random top-8 on 123k tokens): MaxVio **0.018 ± 0.003**; MaxVio ceiling is N/K − 1 = 7.
+
+| Strategy | Test ppl | Δppl | MaxVio mean | MaxVio max | Entropy | Drift (Jaccard) | Seeds |
+|---|---|---|---|---|---|---|---|
+| base (no training) | 6.947 | – | 5.695 | 6.963 | 0.884 | 1.000 | – |
+| no balancing | 6.756 | 0 | 5.719 | 6.976 | 0.881 | 0.902 | 2 |
+| aux 1e-3 | 6.752 | −0.01% | 5.709 | 6.974 | 0.883 | 0.902 | 1 |
+| aux 1e-3 + z-loss | 6.753 | 0.00% | 5.708 | 6.974 | 0.883 | 0.901 | 1 |
+| aux 1e-2 | 6.761 | +0.08% | 5.647 | 6.961 | 0.894 | 0.884 | 2 |
+| aux 1e-1 | 6.861 | +1.60% | 5.169 | 6.934 | 0.924 | 0.777 | 1 |
+| loss-free bias | 22.18 | **+225%** | **0.559** | **1.40** | **0.997** | 0.437 | 2 |
+| frozen router | **6.745** | −0.12% | 5.703 | 6.971 | 0.883 | 0.937 | 1 |
+| random router (floor) | – | – | 0.018 | – | 1.000 | – | – |
+
+Two-seed rows are means over seeds 42/43 (seed spread: ppl ±0.004, loss-free ppl 21.98 / 22.37). Raw data: `part2_runs/*.json`, `part2_results.csv`; plots: `part2_heatmaps_all.png`, `part2_curves.png`, `part2_base_layer_curves.png`.
+
+**Findings.**
+- The base model is badly imbalanced (MaxVio 5.7 of 7) and it gets worse with depth: MaxVio 4.8 / 5.7 / 6.6 for early / middle / late layers, layer 23 has 41 of 64 experts under 0.25× load. 24 experts in 15 layers are in the top-8 of >90% of tokens (implicit shared experts).
+- Without balancing, 300 steps do not change balance (+0.02 MaxVio, about the noise floor). aux 1e-3 and the z-loss are the same as no balancing (router logsumexp is already ≈0.01).
+- aux 1e-2 gives a small repeatable gain (MaxVio −0.07, same on both seeds) at no measurable cost (+0.08% ppl, within seed spread). aux 1e-1 balances more (entropy 0.924) for +1.6% ppl.
+- Loss-free at u = 1e-3 balances best (MaxVio 0.56, entropy 0.997) but ppl triples (6.76 → 22.2) and drift is 0.44, on both seeds. Probable cause: the step is large next to softmax probabilities of ~1/64 (hypothesis, u = 1e-4 not run).
+- Frozen-router ppl equals the trained routers within noise. Its drift is 0.937, so a large part of the drift comes from attention changing the router input.
+- Predictions were registered before the runs (`predictions.json`); no_balance and aux 1e-3 rows used an earlier partial run. Biggest miss: loss-free ppl predicted +3%, measured +225%.
+
+**Limitations.** Experts are frozen and the run is short, so this is not pretraining-style collapse. Most strategies have one seed, loss-free was run only at u = 1e-3, MaxVio saturates near its ceiling (entropy is more informative), Ukrainian only, Part 1 used transformers 5.0.0.
 
 ## Part 3 - MixLoRA (bonus)
 
