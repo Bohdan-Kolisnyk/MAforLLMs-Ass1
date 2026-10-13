@@ -1,3 +1,5 @@
+### Team: Bohdan Kolisnyk, Mykhailo Tkachenko, Denys Pushkaruk
+
 ## Part 1 - Context extension (RoPE)
 
 Notebook: `Part-1/maforllms-ass1-pt1.ipynb` · Results: `Part-1/` · 1× T4, fp16, seed 42 · transformers 5.0.0, torch 2.10.0+cu128
