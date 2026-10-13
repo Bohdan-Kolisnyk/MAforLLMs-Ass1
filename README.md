@@ -1,3 +1,37 @@
+## Part 1 — Context extension (RoPE)
+
+Notebook: `Part-1/maforllms-ass1-pt1.ipynb` · Results: `Part-1/` · 1× T4, fp16, seed 42 · transformers 5.0.0, torch 2.10.0+cu128
+
+**Setup.** EuroMoE-2.6B-A0.6B (2.61B total / 0.50B active params, 64 experts, top-8, GQA 8 query / 2 KV heads, head dim 128).
+Native context L_train = 4,096, RoPE base 500,000, target s = 4 (16,384 tokens). Chosen for its 4,096 native context, Ukrainian in pretraining, and T4 feasibility.
+Tokenizer fertility on our eval text: 2.38 tokens/word (3.0 chars/token).
+Eval: 110 Kobza documents (hplt-2.0 58, fineweb-2 26, cultura-x 23, ubertext2.0 3), each ≥16,384 tokens (median 23,192), 0 exact duplicates. The first 16,384 tokens of each document are used.
+
+**Method.** Three modes, implemented by editing `rotary_emb.inv_freq` in place: no scaling, position interpolation (inv_freq / s), NTK-aware base scaling (b' = b·s^(d/(d−2)) = 2.04M, c_i = s^(−2i/(d−2))).
+Equivalence on the frequency table (limit 1e-5): none vs loaded model 3.0e-8, PI vs HF `linear` 7.5e-9, NTK vs derived c_i formula 6.0e-8 (HF has no static NTK type).
+Loss: teacher-forced on held-out human text, 16 bins of 1,024 tokens, 110 docs × 3 modes (5.2 min per mode).
+Passkey: 5-digit key at depth 10/50/90%, lengths 4,096/8,192/16,384, 5 trials per cell, greedy decoding (hit = key appears in the 10 generated tokens), 135 trials in 4.6 min.
+A custom GQA-safe SDPA kernel is needed on T4 (no FlashAttention-2). Passkey uses a manual prefill/decode loop.
+
+| Method | Loss 0–4k | 4–8k | 8–12k | 12–16k | Passkey L | 2L | 4L |
+|---|---|---|---|---|---|---|---|
+| no scaling | 1.82 | 5.81 | 6.74 | 7.86 | 10/15 | 0/15 | 0/15 |
+| position interpolation | 4.87 | 4.88 | 4.92 | 4.92 | 0/15 | 0/15 | 0/15 |
+| NTK-aware | 1.84 | 1.81 | 4.22 | 6.27 | 11/15 | **14/15** | 0/15 |
+
+Loss is the mean over the position range; passkey is hits over 3 depths × 5 trials. Raw data: `position_binned_loss_results.json`, `passkey_results.json`; plot: `position_binned_loss.png`.
+
+**Findings.**
+- No scaling has a cliff right after L_train (1.81 → 4.08 in the first bin past 4,096, then 6–8), and passkey falls to 0 at 2L.
+- Training-free PI is flat at ~4.9 everywhere, including inside L_train (+3.0 nats over baseline at the first bin). It never recovers short-range resolution, and passkey is 0/45 at every length.
+- NTK-aware matches baseline in range (max gap 0.018 over bins 0–3) and stays ≤1.93 up to ~8k tokens (~1.9×L_train). It then rises (2.32 → 3.10 → 5.50 at 8.7k / 9.7k / 10.8k). Passkey is 14/15 at 2L against 0/15 for baseline.
+- Perplexity and passkey agree: retrieval works exactly where loss is near baseline and is 0 once loss goes above ~4.
+- We would ship NTK-aware. The nominal s = 4 is not reached without fine-tuning: usable context is ≈2×L_train, and 4×L_train fails.
+
+**Limitations.** No fine-tuned comparison, no dynamic NTK or YaRN, no English/PG-19 contrast (Ukrainian only). Passkey has 5 trials per cell (resolution 0.2).
+NTK at L_train, depth 0.5 scored 0.2, below baseline's 0.6. This is probably noise but was not re-run. One seed. No predictions were registered before the runs.
+Saved output of notebook cell 7 shows slowest freq 6.14e-07 because the cell was re-run after the sweeps left the model in NTK mode (unscaled value: 2.455e-06).
+
 ## Part 3 — MixLoRA (bonus)
 
 Notebook: `maforllms-ass1-pt3.ipynb` · Config: `config_part3.json` · 1× T4, fp16, seed 42
